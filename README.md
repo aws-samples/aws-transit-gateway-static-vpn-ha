@@ -32,7 +32,7 @@ The solution will use the following architecture:
 
 ## Deployment Steps
 
-Download the latest template (or clone the repo): [CF template](https://github.com/aws-samples/aws-transit-gateway-static-vpn-ha/raw/master/transit-gateway-static-vpn.yaml) 
+Download the latest template (or clone the repo): [CF template](https://github.com/aws-samples/aws-transit-gateway-static-vpn-ha/raw/main/transit-gateway-static-vpn.yaml) 
 
 ### CF stack will create the following resources:
 
