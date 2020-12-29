@@ -10,7 +10,7 @@ The solution will use the following architecture:
 ![](images/architecture.png)
 
 * Transit Gateway Static VPN failure (Primary) will trigger CloudWatch Alarm
-* CloudWatch Alarm trigger will be captured by Amazon EventBridge rule which** **will generate an event for Lambda Function
+* CloudWatch Alarm trigger will be captured by Amazon EventBridge rule which will generate an event for Lambda Function
 * Lambda Function will now query DynamoDB table
     * DynamoDB table maintains last VPN state change - This is to avoid false positive and not have continuous route switching. 
     * Lambda Function will take an action depending on VPN State TimeStamp:
@@ -74,7 +74,7 @@ After you add the tags, go ahead and manually create CloudWatch Alarm and CloudW
 
 ### **Event Source**
 
-**Event Pattern - **Use Build custom event pattern with the following pattern
+**Event Pattern** - Use Build custom event pattern with the following pattern
 
 ```
   {
@@ -98,7 +98,7 @@ After you add the tags, go ahead and manually create CloudWatch Alarm and CloudW
 ```
 
 
-**Targets
+**Targets**
 
 * From the drop down select the Lambda Function launched by CloudFormation Template
 * Configure version/alias - Keep Default
