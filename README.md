@@ -1,7 +1,5 @@
 ## Solution Overview:
 
-Author : Jaywant Kapadnis | AWS System Dev Engineer 
-
 AWS Transit Gateway doesn’t natively provide HA (high availability) for Static VPNs. There’s no automatic route propagation for Static VPNs prefixes and hence customers have to manually add static routes. In the event of VPN failure, this can result in significant downtime. This solution provides a way to automatically failover Static VPNs on AWS Transit Gateway using AWS Lambda function.
 
 
@@ -132,6 +130,7 @@ Your rule should look like this:
 * There’s no preempt i.e. if VPN fail-overs from primary to backup and if your primary comes back online - The function will not replace routes with Primary VPN attachment, you’ll have to manually update the Transit Gateway Route table.
 * You can only have pair of VPNs in primary, backup configuration. 
 * Cloudformation is provided for one pair of static VPNs. For additional VPNs, you’ll will have to manually add CloudWatch Alarm and CloudWatch Event rule
+* Solution will not work with Prefix list references with Attachment ID as Static VPN connection
 
 # License
 
