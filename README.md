@@ -1,5 +1,7 @@
 ## Solution Overview:
 
+Author : Jaywant Kapadnis | AWS System Dev Engineer 
+
 AWS Transit Gateway doesn’t natively provide HA (high availability) for Static VPNs. There’s no automatic route propagation for Static VPNs prefixes and hence customers have to manually add static routes. In the event of VPN failure, this can result in significant downtime. This solution provides a way to automatically failover Static VPNs on AWS Transit Gateway using AWS Lambda function.
 
 
