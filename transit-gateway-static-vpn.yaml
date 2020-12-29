@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+    This function creates Lambda Function, DynamoDB table and CloudWatch Events. Once triggered, Lambda Function will change the tgw route table for static VPN attachments
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: 'Transit Gateway Static VPN Information'
+      Parameters:
+        - PrimaryVPN
+    - Label:
+        default: 'Lambda Settings'
+      Parameters:
+        - TGWLambdaS3Bucket
+        - TGWLambdaS3Key
+    ParameterLabels:
+      PrimaryVPN:
+        default: Primary VPN ID
+      TGWLambdaS3Bucket:
+        default: S3 Bucket
+      TGWLambdaS3Key:
+        default: S3 Key
+Parameters:
+  PrimaryVPN:
+    Type: String
+    Description: Please enter the Primary Static VPN ID attached to Transit Gateway
+  TGWLambdaS3Bucket:
+    Description: S3 Bucket for Transit Gateway Static HA Lambda Code
+    Type: String
+    AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
+  TGWLambdaS3Key:
+    Description: The Key location of the Lambda zip.
+    Type: String
+    AllowedPattern: ^[a-zA-Z0-9[\\].\/()!:=?#,@+&;{}$-_]*
+Resources:
+
+  lambdaTgwStaticVPNHAIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+
+  lambdaTgwStaticVPNHAIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "lambdaTgwStaticVPNHAIAMPolicy"
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                 - 'ec2:DescribeTransitGatewayAttachments'
+                 - 'ec2:DescribeTransitGatewayRouteTables'
+                 - 'ec2:SearchTransitGatewayRoutes'
+                 - 'ec2:ReplaceTransitGatewayRoute'
+                 - 'ec2:DescribeVpnConnections'
+                 - 'dynamodb:GetItem'
+                 - 'dynamodb:PutItem'
+                 - 'dynamodb:UpdateItem'
+                 - "logs:Create*"
+                 - "logs:PutLogEvents"
+              Resource: '*'
+      Roles:
+        - !Ref lambdaTgwStaticVPNHAIAMRole
+
+  lambdaTgwStaticVPNHA:
+    Type: "AWS::Lambda::Function"
+    DependsOn : TgwStaticVPNHATable
+    Properties:
+      Code:
+        S3Bucket: !Ref TGWLambdaS3Bucket
+        S3Key: !Ref TGWLambdaS3Key
+      Description: "When Lambda Function is triggered it will switch TGW Static VPN Routes"
+      Handler: "index.lambda_handler"
+      Role: !GetAtt lambdaTgwStaticVPNHAIAMRole.Arn
+      Runtime: "python3.7"
+      Timeout: 10
+      Environment:
+        Variables:
+          DynamoDbTable:
+            Ref: TgwStaticVPNHATable
+          logging_level: INFO
+
+  TgwStaticVPNHATable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: 'vpnId'
+        AttributeType: 'S'
+      KeySchema:
+      - AttributeName: 'vpnId'
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: '5'
+        WriteCapacityUnits: '5'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${lambdaTgwStaticVPNHA}"
+
+  VPNDownAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Average TunnelState over last 1 minutes is less than 50%.'
+      Namespace: 'AWS/VPN'
+      MetricName: TunnelState
+      Dimensions:
+        - Name: VpnId
+          Value: !Ref PrimaryVPN
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: LessThanThreshold
+      Threshold: 0.5
+
+  CloudWatchEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - 'CloudWatch Alarm State Change'
+        resources:
+          - !Join [ '', [ 'arn:aws:cloudwatch:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':','alarm',':', !Ref VPNDownAlarm ] ]
+        detail: 
+          state:
+            value:
+              - "ALARM"
+      State: "ENABLED"
+      Targets:
+        - 
+          Arn: 
+            Fn::GetAtt:
+              - lambdaTgwStaticVPNHA
+              - Arn
+          Id: lambdaTgwStaticVPNHA
+          InputTransformer:
+              InputPathsMap: 
+                  downTS: $.time
+                  vpnId: $.detail.configuration.metrics[0].metricStat.metric.dimensions.VpnId
+              InputTemplate: |
+                 {
+                    "vpnId" : <vpnId>,
+                    "downTS": <downTS>
+                 }
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt
+        - lambdaTgwStaticVPNHA
+        - Arn
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt
+        - CloudWatchEventRule
+        - Arn
